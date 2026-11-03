@@ -1,5 +1,9 @@
 # Drift · Sleep Planner
 
+<p align="center">
+  <img src="icons/icon-192.png" alt="Drift app icon" width="128">
+</p>
+
 Drift is a sleep planning web app. It asks a few questions about your wake-up time, sleep needs and evening habits, then builds a personal bedtime plan with a wind-down timeline, sleep-cycle bedtimes, weekend options and tips.
 
 **Live site:** https://thelincolnmosley.github.io/drift-sleep-planner/
