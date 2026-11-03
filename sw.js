@@ -1,4 +1,4 @@
-const CACHE = 'drift-v1';
+const CACHE = 'drift-v2';
 const ASSETS = [
   './',
   './index.html',
