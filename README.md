@@ -11,6 +11,7 @@ Drift is a sleep planning web app. It asks a few questions about your wake-up ti
 - Tonight's timeline: last caffeine, workout cutoff, wind-down, bed and asleep
 - Sleep-cycle bedtimes (4, 5 or 6 cycles) with the best match highlighted
 - Weekend plan when your weekend wake-up differs
+- "Running late" card: after your planned bedtime, shows how much sleep you can still get before your alarm
 - Personal tips based on your answers
 - Remembers your answers on the device (localStorage)
 - Installable as a home-screen app (PWA) and works offline

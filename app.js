@@ -154,6 +154,39 @@
     };
   }
 
+  function latePlan(plan, p) {
+    var d = new Date();
+    var now = d.getHours() * 60 + d.getMinutes();
+    var lateBy = mod(now - plan.bed);
+    var window = mod(plan.wake - plan.bed);
+    if (lateBy < 1 || lateBy >= window) return null;
+    var sleepAt = mod(now + p.latency);
+    var avail = Math.max(0, window - lateBy - p.latency);
+    return {
+      sleepAt: sleepAt,
+      avail: avail,
+      shortfall: Math.max(0, plan.need - avail),
+      cycles: Math.floor(avail / 90)
+    };
+  }
+
+  function lateCard(plan, p, late) {
+    var msg;
+    if (late.avail <= 0) {
+      msg = 'There is not enough time for a full night before your alarm. Rest now anyway, since even a short sleep helps.';
+    } else if (late.shortfall > 0) {
+      msg = 'That is ' + fmtDur(late.shortfall) + ' short of your target. Get into bed now and keep screens away to make the most of it.';
+    } else {
+      msg = 'You can still hit your full sleep target. Get into bed now and you are covered.';
+    }
+    var cycles = late.cycles >= 1 ? ' That covers ' + late.cycles + ' full sleep cycle' + (late.cycles === 1 ? '' : 's') + '.' : '';
+    return '<div class="card enter"><p class="eyebrow">Running late</p><h2>Sleep you can still get</h2>' +
+      '<div class="big">' + fmtDur(late.avail) + '</div>' +
+      '<p class="hint">If you fall asleep at ' + fmtTime(late.sleepAt) + ', you will get ' + fmtDur(late.avail) +
+      ' before your ' + fmtTime(plan.wake) + ' alarm. Your target is ' + fmtDur(plan.need) + '.</p>' +
+      '<p class="hint">' + msg + cycles + '</p></div>';
+  }
+
   function statusFor(plan, p) {
     var d = new Date();
     var now = d.getHours() * 60 + d.getMinutes();
@@ -271,6 +304,9 @@
 
     var tips = tipsFor(p, plan).map(function (t) { return '<li>' + t + '</li>'; }).join('');
 
+    var late = preview ? null : latePlan(plan, p);
+    var lateHtml = late ? lateCard(plan, p, late) : '';
+
     var actions = preview
       ? '<button class="primary" data-act="save">Save and open my plan</button>' +
         '<button class="ghost" data-act="change">Change my answers</button>'
@@ -289,6 +325,7 @@
           '<p class="hero-sub">Asleep around ' + fmtTime(plan.asleep) + ' · up at ' + fmtTime(plan.wake) + ' · ' + fmtHours(plan.need / 60) + ' of sleep</p>' +
           '<div class="status">' + status + '</div>' +
         '</div>' +
+        lateHtml +
         '<div class="card"><h2>Tonight’s timeline</h2><ol class="timeline">' + timeline + '</ol></div>' +
         '<div class="card"><h2>Sleep-cycle bedtimes</h2>' +
           '<p class="hint" style="margin-top:0">Sleep cycles last about 90 minutes. Waking at the end of one feels easier.</p>' +
