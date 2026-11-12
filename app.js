@@ -2,6 +2,7 @@
   'use strict';
 
   var KEY = 'drift.profile.v1';
+  var REMINDER_KEY = 'drift.reminders.v1';
   var DAY = 1440;
   var app = document.getElementById('app');
 
@@ -46,6 +47,16 @@
   var editing = false;
   var busy = false;
   var deferredPrompt = null;
+  var reminders = loadReminders();
+  var reminderTimers = [];
+  var reminderNotice = '';
+  var activeBanner = null;
+  var bannerTimer = null;
+  var iosStep = 0;
+  var iosTimer = null;
+  var iosManualPauseUntil = 0;
+  var showIOSGuideOverride = false;
+  var copyFeedback = '';
 
   function mod(n) { return ((Math.round(n) % DAY) + DAY) % DAY; }
 
@@ -63,6 +74,7 @@
   }
 
   function fmtDur(mins) {
+    mins = Math.max(0, Math.round(mins));
     var h = Math.floor(mins / 60), m = mins % 60;
     if (!h) return m + ' min';
     return h + 'h' + (m ? ' ' + m + 'm' : '');
@@ -86,6 +98,33 @@
     try { localStorage.setItem(KEY, JSON.stringify({ v: 1, savedAt: Date.now(), profile: p })); } catch (e) { }
   }
 
+  function defaultReminders() {
+    return {
+      enabled: false,
+      winddown: true,
+      bed: true,
+      windFireAt: null,
+      bedFireAt: null,
+      firedTags: {}
+    };
+  }
+
+  function loadReminders() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(REMINDER_KEY));
+      if (!raw || typeof raw !== 'object') return defaultReminders();
+      return Object.assign(defaultReminders(), raw, {
+        firedTags: (raw.firedTags && typeof raw.firedTags === 'object') ? raw.firedTags : {}
+      });
+    } catch (e) {
+      return defaultReminders();
+    }
+  }
+
+  function saveReminders() {
+    try { localStorage.setItem(REMINDER_KEY, JSON.stringify(reminders)); } catch (e) { }
+  }
+
   function defaults() {
     var d = {};
     QUESTIONS.forEach(function (q) { d[q.id] = q.def; });
@@ -93,18 +132,525 @@
   }
 
   function isStandalone() {
-    return window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if (window.navigator.standalone === true) return true;
+    if (document.referrer && document.referrer.indexOf('android-app://') === 0) return true;
+    if (window.matchMedia) {
+      if (window.matchMedia('(display-mode: standalone)').matches) return true;
+      if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+      if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+    }
+    return false;
   }
 
   function isIOS() {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var ua = navigator.userAgent || '';
+    return (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && !window.MSStream;
+  }
+
+  function getIOSContext() {
+    var ua = navigator.userAgent || '';
+    var standalone = isStandalone();
+    var ios = isIOS();
+    var ipad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var inApp = /FBAN|FBAV|Instagram|Line\/|Twitter|MicroMessenger|TikTok|BytedanceWebview|LinkedInApp|Snapchat|Pinterest/i.test(ua);
+    var crios = /CriOS/i.test(ua);
+    var fxios = /FxiOS/i.test(ua);
+    var edgios = /EdgiOS/i.test(ua);
+    var gsa = /GSA\//i.test(ua);
+    var opios = /OPiOS/i.test(ua);
+    var ddg = /DuckDuckGo/i.test(ua);
+    var otherBrowser = crios || fxios || edgios || gsa || opios || ddg;
+    var safari = ios && !standalone && !inApp && !otherBrowser && /Safari/i.test(ua) && /AppleWebKit/i.test(ua);
+
+    var browserName = 'Safari';
+    if (inApp) browserName = 'In-app browser';
+    else if (crios) browserName = 'Chrome on iOS';
+    else if (fxios) browserName = 'Firefox on iOS';
+    else if (edgios) browserName = 'Edge on iOS';
+    else if (gsa) browserName = 'Google app';
+    else if (ddg) browserName = 'DuckDuckGo';
+    else if (opios) browserName = 'Opera';
+
+    var deviceName = ipad ? 'iPad' : 'iPhone';
+    var toolbarLoc = ipad ? 'top toolbar' : (crios || edgios ? 'top-right address bar' : 'bottom toolbar');
+
+    return {
+      standalone: standalone,
+      ios: ios,
+      ipad: ipad,
+      inApp: inApp,
+      safari: safari,
+      otherBrowser: otherBrowser,
+      needsOpenInSafari: inApp || gsa,
+      browserName: browserName,
+      deviceName: deviceName,
+      toolbarLoc: toolbarLoc
+    };
+  }
+
+  function shareIconSvg() {
+    return '<svg class="ios-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M12 3v12"/>' +
+      '<path d="M8 7l4-4 4 4"/>' +
+      '<path d="M5 11v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>' +
+    '</svg>';
+  }
+
+  function plusSquareIconSvg() {
+    return '<svg class="ios-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<rect x="3" y="3" width="18" height="18" rx="4"/>' +
+      '<path d="M12 8v8"/>' +
+      '<path d="M8 12h8"/>' +
+    '</svg>';
+  }
+
+  function renderIOSWalkthroughCard(ctx) {
+    var badge = ctx.ios
+      ? (ctx.deviceName + ' · ' + ctx.browserName)
+      : 'iPhone & iPad · Safari';
+
+    var browserCallout = '';
+    if (ctx.needsOpenInSafari) {
+      browserCallout =
+        '<div class="ios-callout warn">' +
+          '<div class="ios-callout-text">' +
+            '<strong>Open in Safari first</strong>' +
+            '<span>You’re in ' + esc(ctx.browserName) + ', which hides Add to Home Screen. Tap <b>•••</b> and choose <b>Open in Safari</b>, or copy the link below.</span>' +
+          '</div>' +
+          '<button class="ios-copy-btn" data-act="copy-url">' + (copyFeedback || 'Copy link') + '</button>' +
+        '</div>';
+    } else if (ctx.otherBrowser) {
+      browserCallout =
+        '<div class="ios-callout">' +
+          '<div class="ios-callout-text">' +
+            '<strong>Using ' + esc(ctx.browserName) + '?</strong>' +
+            '<span>Tap the Share icon in the ' + esc(ctx.toolbarLoc) + ', or open this page in <b>Safari</b> for full Home Screen support.</span>' +
+          '</div>' +
+          '<button class="ios-copy-btn" data-act="copy-url">' + (copyFeedback || 'Copy link') + '</button>' +
+        '</div>';
+    }
+
+    return '<div class="card ios-guide" id="iosGuideCard" data-active-step="' + iosStep + '">' +
+      '<div class="ios-guide-head">' +
+        '<div>' +
+          '<p class="eyebrow">Install on ' + esc(ctx.deviceName) + '</p>' +
+          '<h2>Add Drift to your Home Screen</h2>' +
+        '</div>' +
+        '<span class="ios-env-badge">' + esc(badge) + '</span>' +
+      '</div>' +
+      '<p class="hint ios-guide-sub">Install Drift in 3 quick taps for instant offline access, a full-screen experience and bedtime notifications.</p>' +
+      browserCallout +
+      '<div class="ios-stage" aria-hidden="true">' +
+        '<div class="ios-scene ios-scene-0' + (iosStep === 0 ? ' active' : '') + '">' +
+          '<div class="mock-phone">' +
+            '<div class="mock-screen-body">' +
+              '<div class="mock-mini-orb">🌙</div>' +
+              '<div class="mock-mini-title">Drift · Sleep Planner</div>' +
+              '<div class="mock-pointer">Tap Share below ↓</div>' +
+            '</div>' +
+            '<div class="mock-safari-bar">' +
+              '<span class="mock-nav">‹</span>' +
+              '<span class="mock-nav">›</span>' +
+              '<span class="mock-share-target">' + shareIconSvg() + '<span class="mock-pulse"></span></span>' +
+              '<span class="mock-nav">📖</span>' +
+              '<span class="mock-nav">❐</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ios-scene ios-scene-1' + (iosStep === 1 ? ' active' : '') + '">' +
+          '<div class="mock-phone">' +
+            '<div class="mock-sheet">' +
+              '<div class="mock-sheet-handle"></div>' +
+              '<div class="mock-sheet-header">' +
+                '<span class="mock-app-chip">🌙</span>' +
+                '<div><b>Drift · Sleep Planner</b><small>drift-sleep-planner</small></div>' +
+              '</div>' +
+              '<div class="mock-sheet-row muted-row"><span>Copy</span><span>📋</span></div>' +
+              '<div class="mock-sheet-row highlight-row">' +
+                '<span>Add to Home Screen</span>' +
+                '<span class="mock-plus-badge">' + plusSquareIconSvg() + '</span>' +
+                '<span class="mock-row-pulse"></span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ios-scene ios-scene-2' + (iosStep === 2 ? ' active' : '') + '">' +
+          '<div class="mock-phone">' +
+            '<div class="mock-dialog">' +
+              '<div class="mock-dialog-top">' +
+                '<span class="mock-cancel">Cancel</span>' +
+                '<b>Add to Home Screen</b>' +
+                '<span class="mock-add-btn">Add<span class="mock-pulse"></span></span>' +
+              '</div>' +
+              '<div class="mock-dialog-card">' +
+                '<span class="mock-home-icon">🌙</span>' +
+                '<div><b>Drift</b><small>Full-screen Home Screen app</small></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<ol class="ios-steps">' +
+        '<li class="ios-step' + (iosStep === 0 ? ' active' : '') + '" data-ios-step="0">' +
+          '<span class="ios-step-num">1</span>' +
+          '<div class="ios-step-body">' +
+            '<div class="ios-step-title">Tap <strong>Share</strong> in the ' + esc(ctx.toolbarLoc) + '</div>' +
+            '<div class="ios-step-desc">Look for the square icon with an upward arrow in Safari.</div>' +
+          '</div>' +
+          '<span class="ios-step-icon">' + shareIconSvg() + '</span>' +
+        '</li>' +
+        '<li class="ios-step' + (iosStep === 1 ? ' active' : '') + '" data-ios-step="1">' +
+          '<span class="ios-step-num">2</span>' +
+          '<div class="ios-step-body">' +
+            '<div class="ios-step-title">Choose <strong>Add to Home Screen</strong></div>' +
+            '<div class="ios-step-desc">Scroll down the share sheet until you see the plus-in-square row.</div>' +
+          '</div>' +
+          '<span class="ios-step-icon">' + plusSquareIconSvg() + '</span>' +
+        '</li>' +
+        '<li class="ios-step' + (iosStep === 2 ? ' active' : '') + '" data-ios-step="2">' +
+          '<span class="ios-step-num">3</span>' +
+          '<div class="ios-step-body">' +
+            '<div class="ios-step-title">Tap <strong>Add</strong> in the top-right corner</div>' +
+            '<div class="ios-step-desc">Open Drift from your Home Screen for full-screen mode & notifications.</div>' +
+          '</div>' +
+          '<span class="ios-step-pill">Add</span>' +
+        '</li>' +
+      '</ol>' +
+      (!ctx.ios && showIOSGuideOverride ? '<button class="ghost ios-hide-btn" data-act="toggle-ios-guide">Hide iPhone install steps</button>' : '') +
+    '</div>';
+  }
+
+  function updateIOSWalkthroughDOM() {
+    var card = document.getElementById('iosGuideCard');
+    if (!card) return;
+    card.setAttribute('data-active-step', String(iosStep));
+    var scenes = card.querySelectorAll('.ios-scene');
+    for (var i = 0; i < scenes.length; i++) {
+      scenes[i].classList.toggle('active', i === iosStep);
+    }
+    var steps = card.querySelectorAll('.ios-step');
+    for (var j = 0; j < steps.length; j++) {
+      steps[j].classList.toggle('active', j === iosStep);
+    }
+  }
+
+  function ensureIOSWalkthroughTimer() {
+    if (iosTimer) return;
+    iosTimer = setInterval(function () {
+      if (!document.getElementById('iosGuideCard')) return;
+      if (Date.now() < iosManualPauseUntil) return;
+      iosStep = (iosStep + 1) % 3;
+      updateIOSWalkthroughDOM();
+    }, 3200);
   }
 
   function installHint() {
-    if (isStandalone()) return '';
-    if (deferredPrompt) return '<button class="install-btn" data-act="install">Install Drift on this device</button>';
-    if (isIOS()) return '<p class="install">Install on iPhone: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>';
-    return '';
+    var ctx = getIOSContext();
+    if (ctx.standalone) return '';
+    if (ctx.ios || showIOSGuideOverride) {
+      ensureIOSWalkthroughTimer();
+      return renderIOSWalkthroughCard(ctx);
+    }
+    if (deferredPrompt) {
+      return '<div class="install-stack">' +
+        '<button class="install-btn" data-act="install">Install Drift on this device</button>' +
+        '<button class="ghost ios-toggle-link" data-act="toggle-ios-guide">On iPhone or iPad? See Add to Home Screen steps</button>' +
+      '</div>';
+    }
+    return '<button class="ghost ios-toggle-link" data-act="toggle-ios-guide">📱 Install on iPhone or iPad · See Add to Home Screen steps</button>';
+  }
+
+  function canUseNotifications() {
+    return typeof window !== 'undefined' && 'Notification' in window;
+  }
+
+  function getNotificationPermission() {
+    if (!canUseNotifications()) return 'unsupported';
+    return Notification.permission || 'default';
+  }
+
+  function requestNotificationPermission() {
+    if (!canUseNotifications()) return Promise.resolve('unsupported');
+    try {
+      var res = Notification.requestPermission();
+      if (res && typeof res.then === 'function') return res;
+    } catch (e) { }
+    return new Promise(function (resolve) {
+      try {
+        Notification.requestPermission(function (perm) { resolve(perm); });
+      } catch (err) {
+        resolve(getNotificationPermission());
+      }
+    });
+  }
+
+  function computeNextFireTimestamp(targetMin, nowMs) {
+    var now = new Date(nowMs || Date.now());
+    var target = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      Math.floor(mod(targetMin) / 60),
+      mod(targetMin) % 60,
+      0,
+      0
+    );
+    if (target.getTime() <= now.getTime()) {
+      target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+  }
+
+  function dateKeyForTimestamp(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function playGentleChime() {
+    try {
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      var ctx = new AudioCtx();
+      var now = ctx.currentTime;
+      [528, 660].forEach(function (freq, idx) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.18);
+        gain.gain.setValueAtTime(0.0001, now + idx * 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + idx * 0.18 + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.18 + 0.55);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.18);
+        osc.stop(now + idx * 0.18 + 0.6);
+      });
+    } catch (e) { }
+  }
+
+  function showInAppBanner(title, body) {
+    activeBanner = { title: title, body: body };
+    playGentleChime();
+    if (bannerTimer) clearTimeout(bannerTimer);
+    render(true);
+    bannerTimer = setTimeout(function () {
+      activeBanner = null;
+      var toast = document.querySelector('.notif-toast');
+      if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 6500);
+  }
+
+  function renderInAppBanner() {
+    if (!activeBanner) return '';
+    return '<div class="notif-toast enter" role="status">' +
+      '<div class="notif-toast-icon">🌙</div>' +
+      '<div class="notif-toast-body">' +
+        '<div class="notif-toast-meta"><span>Drift · Bedtime Reminder</span><span>now</span></div>' +
+        '<strong>' + esc(activeBanner.title) + '</strong>' +
+        '<p>' + esc(activeBanner.body) + '</p>' +
+      '</div>' +
+      '<button class="notif-toast-close" data-act="dismiss-banner" aria-label="Dismiss notification">✕</button>' +
+    '</div>';
+  }
+
+  function showLocalNotification(title, body, tag) {
+    showInAppBanner(title, body);
+    if (!canUseNotifications() || Notification.permission !== 'granted') return false;
+    var options = {
+      body: body,
+      tag: tag || 'drift-reminder',
+      icon: './icons/icon-192.png',
+      badge: './icons/icon-192.png',
+      renotify: true,
+      data: { url: './' }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (reg && reg.showNotification) {
+          reg.showNotification(title, options).catch(function () {
+            try { new Notification(title, options); } catch (e) { }
+          });
+        } else {
+          try { new Notification(title, options); } catch (e) { }
+        }
+      }).catch(function () {
+        try { new Notification(title, options); } catch (e) { }
+      });
+    } else {
+      try { new Notification(title, options); } catch (e) { }
+    }
+    return true;
+  }
+
+  function clearReminderTimers() {
+    while (reminderTimers.length) {
+      clearTimeout(reminderTimers.pop());
+    }
+  }
+
+  function postToServiceWorker(msg) {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+      if (reg && reg.active) {
+        reg.active.postMessage(msg);
+      }
+    }).catch(function () { });
+  }
+
+  function buildCueDefinitions(plan, p) {
+    var cues = [];
+    if (reminders.winddown) {
+      cues.push({
+        key: 'winddown',
+        min: plan.windStart,
+        title: 'Start winding down now',
+        body: 'Dim the lights and put screens away for your ' + p.winddown + '-minute wind-down. Bedtime is ' + fmtTime(plan.bed) + '.'
+      });
+    }
+    if (reminders.bed) {
+      cues.push({
+        key: 'bed',
+        min: plan.bed,
+        title: 'Time to get in bed',
+        body: 'Lights out, phone across the room. Aim to be asleep around ' + fmtTime(plan.asleep) + ' for your ' + fmtTime(plan.wake) + ' alarm.'
+      });
+    }
+    return cues;
+  }
+
+  function scheduleTonightReminders(p) {
+    clearReminderTimers();
+    if (!p || !reminders.enabled) {
+      postToServiceWorker({ type: 'CANCEL_NOTIFICATIONS' });
+      return;
+    }
+
+    var plan = computePlan(p);
+    var now = Date.now();
+    var cues = buildCueDefinitions(plan, p);
+    var swItems = [];
+
+    cues.forEach(function (cue) {
+      var prop = cue.key === 'winddown' ? 'windFireAt' : 'bedFireAt';
+      var existing = reminders[prop];
+
+      // If a previously scheduled timestamp was just reached while the tab was backgrounded (within 15 minutes), fire it now
+      if (existing && now >= existing && (now - existing) <= 15 * 60 * 1000) {
+        var missedTag = 'drift-' + cue.key + '-' + dateKeyForTimestamp(existing);
+        if (!reminders.firedTags[missedTag]) {
+          reminders.firedTags[missedTag] = true;
+          showLocalNotification(cue.title, cue.body, missedTag);
+        }
+      }
+
+      var fireAt = computeNextFireTimestamp(cue.min, now);
+      reminders[prop] = fireAt;
+      var delay = Math.max(0, fireAt - now);
+      var tag = 'drift-' + cue.key + '-' + dateKeyForTimestamp(fireAt);
+
+      var timer = setTimeout(function () {
+        if (!reminders.enabled) return;
+        if (!reminders.firedTags[tag]) {
+          reminders.firedTags[tag] = true;
+          saveReminders();
+          showLocalNotification(cue.title, cue.body, tag);
+        }
+        // Re-schedule for the next night
+        setTimeout(function () {
+          if (profile) scheduleTonightReminders(profile);
+          if (view === 'home' && profile) renderHome(profile, false);
+        }, 1500);
+      }, delay);
+
+      reminderTimers.push(timer);
+      swItems.push({
+        tag: tag,
+        title: cue.title,
+        body: cue.body,
+        fireAt: fireAt
+      });
+    });
+
+    if (!reminders.winddown) reminders.windFireAt = null;
+    if (!reminders.bed) reminders.bedFireAt = null;
+    saveReminders();
+    if (getNotificationPermission() === 'granted') {
+      postToServiceWorker({ type: 'SCHEDULE_NOTIFICATIONS', items: swItems });
+    }
+  }
+
+  function reminderCardHtml(plan, p) {
+    var perm = getNotificationPermission();
+    var ctx = getIOSContext();
+    var now = Date.now();
+    var windNext = computeNextFireTimestamp(plan.windStart, now);
+    var bedNext = computeNextFireTimestamp(plan.bed, now);
+    var windInMin = Math.max(1, Math.round((windNext - now) / 60000));
+    var bedInMin = Math.max(1, Math.round((bedNext - now) / 60000));
+    var active = Boolean(reminders.enabled);
+
+    var nextCueSummary = '';
+    if (active) {
+      var upcoming = [];
+      if (reminders.winddown) upcoming.push({ label: '“Start winding down now”', at: plan.windStart, ts: windNext, inMin: windInMin });
+      if (reminders.bed) upcoming.push({ label: '“Time to get in bed”', at: plan.bed, ts: bedNext, inMin: bedInMin });
+      upcoming.sort(function (a, b) { return a.ts - b.ts; });
+      if (upcoming.length) {
+        var first = upcoming[0];
+        nextCueSummary = '<div class="remind-live">' +
+          '<span class="remind-dot"></span>' +
+          '<span>Next alert: <strong>' + first.label + '</strong> at ' + fmtTime(first.at) + ' (in ' + fmtDur(first.inMin) + ')</span>' +
+        '</div>';
+      }
+    }
+
+    var envHint = '';
+    if (ctx.ios && !ctx.standalone) {
+      envHint = '<p class="remind-subhint">💡 Add Drift to your Home Screen below to receive lock-screen notifications on ' + esc(ctx.deviceName) + '.</p>';
+    } else if (active && perm === 'denied') {
+      envHint = '<p class="remind-subhint">💡 Browser notifications are muted in site settings, so alerts will chime inside the open app.</p>';
+    }
+
+    var noticeHtml = reminderNotice ? '<p class="remind-notice">' + esc(reminderNotice) + '</p>' : '';
+
+    return '<div class="card remind-card">' +
+      '<div class="remind-head">' +
+        '<div>' +
+          '<p class="eyebrow">Tonight’s alarms</p>' +
+          '<h2>Bedtime notifications</h2>' +
+        '</div>' +
+        '<span class="remind-badge' + (active ? ' on' : '') + '">' + (active ? 'Scheduled' : 'Off') + '</span>' +
+      '</div>' +
+      '<p class="hint" style="margin-top:0">Schedule local notifications for tonight right from this device — no account or server needed.</p>' +
+      '<div class="remind-cues">' +
+        '<button type="button" class="remind-cue' + (reminders.winddown ? ' on' : '') + '" data-act="remind-cue" data-cue="winddown" aria-pressed="' + (reminders.winddown ? 'true' : 'false') + '">' +
+          '<span class="remind-check">' + (reminders.winddown ? '✓' : '') + '</span>' +
+          '<div class="remind-cue-info">' +
+            '<b>“Start winding down now”</b>' +
+            '<small>In ' + fmtDur(windInMin) + ' · ' + p.winddown + ' min before bed</small>' +
+          '</div>' +
+          '<span class="remind-cue-time">' + fmtTime(plan.windStart) + '</span>' +
+        '</button>' +
+        '<button type="button" class="remind-cue' + (reminders.bed ? ' on' : '') + '" data-act="remind-cue" data-cue="bed" aria-pressed="' + (reminders.bed ? 'true' : 'false') + '">' +
+          '<span class="remind-check">' + (reminders.bed ? '✓' : '') + '</span>' +
+          '<div class="remind-cue-info">' +
+            '<b>“Time to get in bed”</b>' +
+            '<small>In ' + fmtDur(bedInMin) + ' · lights out</small>' +
+          '</div>' +
+          '<span class="remind-cue-time">' + fmtTime(plan.bed) + '</span>' +
+        '</button>' +
+      '</div>' +
+      nextCueSummary +
+      envHint +
+      noticeHtml +
+      '<div class="remind-actions">' +
+        (active
+          ? '<button class="remind-btn-secondary" data-act="remind-test">Send test alert</button>' +
+            '<button class="ghost remind-off-btn" data-act="remind-toggle">Turn off</button>'
+          : '<button class="primary remind-enable-btn" data-act="remind-toggle">🔔 Schedule tonight’s notification' + (reminders.winddown && reminders.bed ? 's' : '') + '</button>') +
+      '</div>' +
+    '</div>';
   }
 
   function computePlan(p) {
@@ -306,6 +852,7 @@
 
     var late = preview ? null : latePlan(plan, p);
     var lateHtml = late ? lateCard(plan, p, late) : '';
+    var remindersHtml = preview ? '' : reminderCardHtml(plan, p);
 
     var actions = preview
       ? '<button class="primary" data-act="save">Save and open my plan</button>' +
@@ -314,6 +861,7 @@
         '<button class="danger" data-act="reset">Erase everything</button></div>';
 
     app.innerHTML =
+      renderInAppBanner() +
       '<section class="screen enter">' +
         '<header class="greet">' +
           '<div><p class="eyebrow">' + dateStr + '</p><h1>' + greet + ', ' + name + '</h1></div>' +
@@ -326,6 +874,7 @@
           '<div class="status">' + status + '</div>' +
         '</div>' +
         lateHtml +
+        remindersHtml +
         '<div class="card"><h2>Tonight’s timeline</h2><ol class="timeline">' + timeline + '</ol></div>' +
         '<div class="card"><h2>Sleep-cycle bedtimes</h2>' +
           '<p class="hint" style="margin-top:0">Sleep cycles last about 90 minutes. Waking at the end of one feels easier.</p>' +
@@ -337,12 +886,26 @@
       '</section>';
   }
 
-  function render() {
+  function render(preserveScroll) {
+    var y = preserveScroll ? window.scrollY : 0;
     if (view === 'intro') renderIntro();
     else if (view === 'quiz') renderQuiz();
     else if (view === 'preview') renderHome(draft, true);
     else renderHome(profile, false);
-    window.scrollTo(0, 0);
+    if (preserveScroll) window.scrollTo(0, y);
+    else window.scrollTo(0, 0);
+  }
+
+  function flashReminderNotice(msg) {
+    reminderNotice = msg;
+    render(true);
+    setTimeout(function () {
+      if (reminderNotice === msg) {
+        reminderNotice = '';
+        var el = document.querySelector('.remind-notice');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      }
+    }, 5000);
   }
 
   function next() {
@@ -381,6 +944,14 @@
   }
 
   app.addEventListener('click', function (e) {
+    var iosStepEl = e.target.closest('[data-ios-step]');
+    if (iosStepEl) {
+      iosStep = Number(iosStepEl.getAttribute('data-ios-step')) || 0;
+      iosManualPauseUntil = Date.now() + 7000;
+      updateIOSWalkthroughDOM();
+      return;
+    }
+
     var choice = e.target.closest('[data-choice]');
     if (choice) { pickChoice(Number(choice.getAttribute('data-choice'))); return; }
 
@@ -402,6 +973,7 @@
       profile = p;
       editing = false;
       view = 'home';
+      scheduleTonightReminders(profile);
       render();
     } else if (act === 'change') {
       step = QUESTIONS.length - 1; view = 'quiz'; render();
@@ -410,7 +982,13 @@
       step = 0; editing = true; view = 'quiz'; render();
     } else if (act === 'reset') {
       if (window.confirm('Erase your name and plan from this device? This cannot be undone.')) {
-        try { localStorage.removeItem(KEY); } catch (err) { }
+        try {
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(REMINDER_KEY);
+        } catch (err) { }
+        clearReminderTimers();
+        postToServiceWorker({ type: 'CANCEL_NOTIFICATIONS' });
+        reminders = defaultReminders();
         profile = null;
         draft = defaults();
         step = 0; editing = false; view = 'intro'; render();
@@ -419,8 +997,87 @@
       if (deferredPrompt) {
         deferredPrompt.prompt();
         deferredPrompt = null;
-        render();
+        render(true);
       }
+    } else if (act === 'toggle-ios-guide') {
+      showIOSGuideOverride = !showIOSGuideOverride;
+      iosStep = 0;
+      render(true);
+      if (showIOSGuideOverride) {
+        var guide = document.getElementById('iosGuideCard');
+        if (guide && guide.scrollIntoView) {
+          guide.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    } else if (act === 'focus-ios-guide') {
+      showIOSGuideOverride = true;
+      render(true);
+      var targetGuide = document.getElementById('iosGuideCard');
+      if (targetGuide && targetGuide.scrollIntoView) {
+        targetGuide.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } else if (act === 'copy-url') {
+      var url = window.location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          copyFeedback = 'Copied!';
+          render(true);
+          setTimeout(function () { copyFeedback = ''; render(true); }, 2200);
+        }).catch(function () { });
+      }
+    } else if (act === 'remind-cue') {
+      var cueKey = b.getAttribute('data-cue');
+      if (cueKey === 'winddown' || cueKey === 'bed') {
+        var otherKey = cueKey === 'winddown' ? 'bed' : 'winddown';
+        if (reminders[cueKey] && !reminders[otherKey]) {
+          reminders[otherKey] = true;
+        }
+        reminders[cueKey] = !reminders[cueKey];
+        saveReminders();
+        if (reminders.enabled && profile) {
+          scheduleTonightReminders(profile);
+        }
+        render(true);
+      }
+    } else if (act === 'dismiss-banner') {
+      activeBanner = null;
+      if (bannerTimer) clearTimeout(bannerTimer);
+      render(true);
+    } else if (act === 'remind-toggle') {
+      if (reminders.enabled) {
+        reminders.enabled = false;
+        reminders.windFireAt = null;
+        reminders.bedFireAt = null;
+        saveReminders();
+        clearReminderTimers();
+        postToServiceWorker({ type: 'CANCEL_NOTIFICATIONS' });
+        flashReminderNotice('Tonight’s notifications turned off.');
+        return;
+      }
+
+      requestNotificationPermission().then(function () {
+        if (!reminders.winddown && !reminders.bed) {
+          reminders.winddown = true;
+        }
+        reminders.enabled = true;
+        saveReminders();
+        if (profile) scheduleTonightReminders(profile);
+        var planNow = computePlan(profile);
+        var targetLabel = reminders.winddown ? fmtTime(planNow.windStart) : fmtTime(planNow.bed);
+        flashReminderNotice('Scheduled for tonight! Your “Start winding down now” alert is set for ' + targetLabel + '.');
+      });
+    } else if (act === 'remind-test') {
+      requestNotificationPermission().then(function () {
+        if (profile) {
+          var planTest = computePlan(profile);
+          showLocalNotification(
+            'Start winding down now',
+            'Dim the lights and put screens away for your ' + profile.winddown + '-minute wind-down. Bedtime is ' + fmtTime(planTest.bed) + '.',
+            'drift-test'
+          );
+          flashReminderNotice('Sent a “Start winding down now” test notification.');
+        }
+      });
     }
   });
 
@@ -446,23 +1103,52 @@
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
     deferredPrompt = e;
-    if (view === 'intro' || view === 'home') render();
+    if (view === 'intro' || view === 'home') render(true);
   });
 
   window.addEventListener('appinstalled', function () {
     deferredPrompt = null;
-    if (view === 'intro' || view === 'home') render();
+    if (view === 'intro' || view === 'home') render(true);
+  });
+
+  if (window.matchMedia) {
+    try {
+      var mq = window.matchMedia('(display-mode: standalone)');
+      if (mq.addEventListener) {
+        mq.addEventListener('change', function () {
+          if (view === 'intro' || view === 'home') render(true);
+        });
+      }
+    } catch (e) { }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && profile) {
+      scheduleTonightReminders(profile);
+      if (view === 'home') render(true);
+    }
+  });
+
+  window.addEventListener('focus', function () {
+    if (profile) {
+      scheduleTonightReminders(profile);
+      if (view === 'home') render(true);
+    }
   });
 
   setInterval(function () {
-    if (view === 'home') renderHome(profile, false);
+    if (profile) scheduleTonightReminders(profile);
+    if (view === 'home') render(true);
   }, 60000);
 
+  if (profile) scheduleTonightReminders(profile);
   render();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { });
+      navigator.serviceWorker.register('sw.js').then(function () {
+        if (profile && reminders.enabled) scheduleTonightReminders(profile);
+      }).catch(function () { });
     });
   }
 })();

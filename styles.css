@@ -611,3 +611,715 @@ input[type="range"]::-moz-range-thumb {
   font-family: inherit;
   cursor: pointer;
 }
+
+.install-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ios-toggle-link {
+  font-size: 14px;
+  color: var(--muted);
+  padding: 8px 10px;
+}
+
+.ios-toggle-link:hover {
+  color: var(--ink);
+}
+
+/* Bedtime Notifications / Reminders Card */
+.remind-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remind-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.remind-head h2 {
+  margin: 0;
+}
+
+.remind-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.remind-badge.on {
+  background: rgba(255, 210, 122, 0.18);
+  border-color: rgba(255, 210, 122, 0.65);
+  color: var(--gold);
+}
+
+.remind-badge.blocked {
+  background: rgba(255, 138, 138, 0.14);
+  border-color: rgba(255, 138, 138, 0.45);
+  color: #ff9a9a;
+}
+
+.remind-cues {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.remind-cue {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.12s;
+}
+
+.remind-cue:active {
+  transform: scale(0.99);
+}
+
+.remind-cue.on {
+  background: linear-gradient(135deg, rgba(155, 140, 255, 0.2), rgba(255, 210, 122, 0.12));
+  border-color: rgba(255, 210, 122, 0.55);
+}
+
+.remind-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #1a1040;
+}
+
+.remind-cue.on .remind-check {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.remind-cue-info b {
+  display: block;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.remind-cue-info small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.remind-cue-time {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.remind-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 210, 122, 0.1);
+  border: 1px solid rgba(255, 210, 122, 0.35);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.remind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex: none;
+  box-shadow: 0 0 10px var(--gold);
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.65; }
+}
+
+.remind-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(155, 140, 255, 0.16);
+  border: 1px solid rgba(155, 140, 255, 0.4);
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.remind-subhint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.notif-toast {
+  position: sticky;
+  top: 12px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 14px;
+  border-radius: 20px;
+  background: rgba(24, 18, 62, 0.94);
+  border: 1px solid rgba(255, 210, 122, 0.65);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+
+.notif-toast-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 35% 30%, #ffe9b0, #ffb3a0 45%, #7a63ff 100%);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+}
+
+.notif-toast-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+.notif-toast-body strong {
+  display: block;
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.notif-toast-body p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.notif-toast-close {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.remind-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.remind-enable-btn {
+  padding: 15px 18px;
+  font-size: 16px;
+}
+
+.remind-btn-secondary {
+  flex: 1;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--gold);
+  background: rgba(255, 210, 122, 0.12);
+  border: 1px solid rgba(255, 210, 122, 0.45);
+  border-radius: 16px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.remind-off-btn {
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+/* iOS Add-to-Home-Screen Animated Walkthrough */
+.ios-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+  background:
+    linear-gradient(165deg, rgba(155, 140, 255, 0.18), rgba(255, 210, 122, 0.08)),
+    var(--card);
+}
+
+.ios-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ios-guide-head h2 {
+  margin: 0;
+}
+
+.ios-env-badge {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--gold);
+  background: rgba(255, 210, 122, 0.14);
+  border: 1px solid rgba(255, 210, 122, 0.4);
+  padding: 4px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.ios-guide-sub {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ios-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(155, 140, 255, 0.15);
+  border: 1px solid rgba(155, 140, 255, 0.4);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ios-callout.warn {
+  background: rgba(255, 159, 184, 0.16);
+  border-color: rgba(255, 159, 184, 0.5);
+}
+
+.ios-callout-text strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.ios-callout-text span {
+  color: var(--muted);
+}
+
+.ios-copy-btn {
+  flex: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  color: #1a1040;
+  background: var(--gold);
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.ios-stage {
+  position: relative;
+  height: 158px;
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 0%, rgba(155, 140, 255, 0.25), rgba(10, 14, 34, 0.85));
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.ios-scene {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px 16px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px) scale(0.985);
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s;
+}
+
+.ios-scene.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.mock-phone {
+  width: 100%;
+  max-width: 310px;
+  height: 100%;
+  border-radius: 14px;
+  background: #101430;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.mock-screen-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+}
+
+.mock-mini-orb {
+  font-size: 20px;
+}
+
+.mock-mini-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.mock-pointer {
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(255, 210, 122, 0.16);
+  border: 1px solid rgba(255, 210, 122, 0.45);
+  padding: 2px 9px;
+  border-radius: 99px;
+  animation: bounceDown 1.3s ease-in-out infinite;
+}
+
+@keyframes bounceDown {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+.mock-safari-bar {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mock-nav {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  user-select: none;
+}
+
+.mock-share-target {
+  position: relative;
+  width: 32px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 210, 122, 0.22);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  display: grid;
+  place-items: center;
+}
+
+.mock-pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--gold);
+  animation: ringPulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(0.92); opacity: 0.95; }
+  100% { transform: scale(1.38); opacity: 0; }
+}
+
+.mock-sheet {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  justify-content: center;
+  animation: sheetSlide 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes sheetSlide {
+  from { transform: translateY(14px); }
+  to { transform: translateY(0); }
+}
+
+.mock-sheet-handle {
+  width: 32px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0 auto 2px;
+}
+
+.mock-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mock-app-chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #7a63ff, #ffb3a0);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.mock-sheet-header b {
+  display: block;
+  font-size: 11.5px;
+}
+
+.mock-sheet-header small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.mock-sheet-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mock-sheet-row.muted-row {
+  opacity: 0.55;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.mock-sheet-row.highlight-row {
+  position: relative;
+  background: rgba(255, 210, 122, 0.2);
+  border: 1px solid var(--gold);
+  color: #fff;
+  font-weight: 650;
+}
+
+.mock-plus-badge {
+  color: var(--gold);
+  display: grid;
+  place-items: center;
+}
+
+.mock-row-pulse {
+  position: absolute;
+  inset: -2px;
+  border-radius: 10px;
+  border: 1.5px solid var(--gold);
+  animation: ringPulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+.mock-dialog {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.mock-dialog-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mock-cancel {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.mock-add-btn {
+  position: relative;
+  background: rgba(255, 210, 122, 0.22);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.mock-dialog-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin: auto 0;
+}
+
+.mock-home-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 35% 30%, #ffe9b0, #ffb3a0 45%, #7a63ff 100%);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mock-dialog-card b {
+  display: block;
+  font-size: 13px;
+}
+
+.mock-dialog-card small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.ios-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ios-step {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.25s, border-color 0.25s, transform 0.15s;
+}
+
+.ios-step.active {
+  background: rgba(255, 210, 122, 0.13);
+  border-color: rgba(255, 210, 122, 0.65);
+}
+
+.ios-step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  transition: background 0.25s, color 0.25s;
+}
+
+.ios-step.active .ios-step-num {
+  background: var(--gold);
+  color: #1a1040;
+}
+
+.ios-step-title {
+  font-size: 14.5px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.ios-step-title strong {
+  color: #fff;
+}
+
+.ios-step-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.ios-step-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+}
+
+.ios-step-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(255, 210, 122, 0.15);
+  border: 1px solid rgba(255, 210, 122, 0.45);
+  padding: 5px 10px;
+  border-radius: 9px;
+}
+
+.ios-hide-btn {
+  font-size: 13px;
+  padding: 4px;
+}
